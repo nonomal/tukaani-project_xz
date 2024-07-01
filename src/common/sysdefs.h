@@ -156,17 +156,24 @@ typedef unsigned char _Bool;
 #	define __bool_true_false_are_defined 1
 #endif
 
+// We may need alignas from C11/C17/C23.
+#if __STDC_VERSION__ >= 202311
+	// alignas is a keyword in C23. Do nothing.
+#elif __STDC_VERSION__ >= 201112
+#	include <stdalign.h>
+#elif defined(__GNUC__) || defined(__clang__)
+#	define alignas(n) __attribute__((__aligned__(n)))
+#else
+#	define alignas(n)
+#endif
+
 #include <string.h>
 
-// Visual Studio 2013 update 2 supports only __inline, not inline.
-// MSVC v19.0 / VS 2015 and newer support both.
+// MSVC v19.00 (VS 2015 version 14.0) and later should work.
 //
 // MSVC v19.27 (VS 2019 version 16.7) added support for restrict.
 // Older ones support only __restrict.
 #ifdef _MSC_VER
-#	if _MSC_VER < 1900 && !defined(inline)
-#		define inline __inline
-#	endif
 #	if _MSC_VER < 1927 && !defined(restrict)
 #		define restrict __restrict
 #	endif
