@@ -402,7 +402,7 @@ test_lzma_str_from_filters(void)
 	free(output_str);
 
 	// Test LZMA_STR_ENCODER flag.
-	// Only the the return value is checked since the actual string
+	// Only the return value is checked since the actual string
 	// may change in the future (even though it is unlikely).
 	// The order of options or the inclusion of new options could
 	// cause a change in output, so we will avoid hardcoding an
@@ -436,6 +436,10 @@ test_lzma_str_from_filters(void)
 	assert_true(lzma_str_to_filters("x86 lzma2", NULL, filters, 0, NULL)
 			== NULL);
 
+	// It always allocates the options structure even when it's not
+	// needed due to start_offset = 0 being the default.
+	assert_true(filters[0].options != NULL);
+
 	assert_lzma_ret(lzma_str_from_filters(&output_str, filters, 0, NULL),
 			LZMA_OK);
 
@@ -444,9 +448,7 @@ test_lzma_str_from_filters(void)
 	free(output_str);
 
 	// Test setting BCJ option to NULL.
-	assert_false(filters[0].options == NULL);
 	free(filters[0].options);
-
 	filters[0].options = NULL;
 
 	assert_lzma_ret(lzma_str_from_filters(&output_str, filters, 0, NULL),
@@ -460,6 +462,7 @@ test_lzma_str_from_filters(void)
 
 	lzma_options_lzma opts;
 	assert_false(lzma_lzma_preset(&opts, LZMA_PRESET_DEFAULT));
+
 	// Test with too many Filters (array terminated after 4+ filters).
 	lzma_filter oversized_filters[LZMA_FILTERS_MAX + 2];
 
@@ -511,6 +514,9 @@ static const char supported_encoders[][9] = {
 #endif
 #ifdef HAVE_ENCODER_ARM64
 	"arm64",
+#endif
+#ifdef HAVE_ENCODER_RISCV
+	"riscv",
 #endif
 #ifdef HAVE_ENCODER_DELTA
 	"delta",
@@ -592,18 +598,23 @@ test_lzma_str_list_filters(void)
 	// Test with bad flags.
 	assert_lzma_ret(lzma_str_list_filters(&str, LZMA_VLI_UNKNOWN,
 			LZMA_STR_NO_VALIDATION , NULL), LZMA_OPTIONS_ERROR);
+	assert_true(str == NULL);
 
 	assert_lzma_ret(lzma_str_list_filters(&str, LZMA_VLI_UNKNOWN,
 			LZMA_STR_NO_SPACES, NULL), LZMA_OPTIONS_ERROR);
+	assert_true(str == NULL);
 
 	// Test with bad Filter ID.
 	assert_lzma_ret(lzma_str_list_filters(&str, LZMA_VLI_UNKNOWN - 1,
 			0, NULL), LZMA_OPTIONS_ERROR);
+	assert_true(str == NULL);
 
 	// Test LZMA_STR_ENCODER flag.
 	assert_lzma_ret(lzma_str_list_filters(&str, LZMA_VLI_UNKNOWN,
 			LZMA_STR_ENCODER, NULL), LZMA_OK);
 
+	// NOTE: Just checking for "contains" is a bit weak check as
+	// "arm" matches "armthumb" and "arm64" too.
 	for (uint32_t i = 0; i < ARRAY_SIZE(supported_encoders); i++)
 		assert_str_contains(str, supported_encoders[i]);
 
@@ -621,6 +632,7 @@ test_lzma_str_list_filters(void)
 	// Test LZMA_STR_GETOPT_LONG flag.
 	assert_lzma_ret(lzma_str_list_filters(&str, LZMA_VLI_UNKNOWN,
 			LZMA_STR_GETOPT_LONG, NULL), LZMA_OK);
+	assert_str_contains(str, "--");
 
 	free(str);
 

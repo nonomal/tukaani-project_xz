@@ -4,20 +4,17 @@
 EXTRA_DIST = \
 	files \
 	ossfuzz \
+	tests.cmake \
 	tuktest.h \
 	tests.h \
+	tests_w32res.rc \
 	test_files.sh \
 	test_compress.sh \
-	test_compress_prepared_bcj_sparc \
-	test_compress_prepared_bcj_x86 \
 	test_compress_generated_abc \
 	test_compress_generated_random \
 	test_compress_generated_text \
 	test_scripts.sh \
 	test_suffix.sh \
-	bcj_test.c \
-	compress_prepared_bcj_sparc \
-	compress_prepared_bcj_x86 \
 	xzgrep_expected_output
 
 AM_CPPFLAGS = \
@@ -29,10 +26,21 @@ LDADD = $(top_builddir)/src/liblzma/liblzma.la
 
 LDADD += $(LTLIBINTL)
 
+# Windows resource compiler support
+.rc.o:
+	$(RC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
+		$(AM_CPPFLAGS) $(CPPFLAGS) $(RCFLAGS) -i $< -o $@
+
+if COND_W32
+LDADD += tests_w32res.o
+endif
+
 check_PROGRAMS = \
 	create_compress_files \
 	test_check \
 	test_hardware \
+	test_stream_buffer_decode \
+	test_stream_buffer_encode \
 	test_stream_flags \
 	test_filter_flags \
 	test_filter_str \
@@ -41,12 +49,15 @@ check_PROGRAMS = \
 	test_index_hash \
 	test_bcj_exact_size \
 	test_memlimit \
+	test_alone_decoder \
 	test_lzip_decoder \
 	test_vli
 
 TESTS = \
 	test_check \
 	test_hardware \
+	test_stream_buffer_decode \
+	test_stream_buffer_encode \
 	test_stream_flags \
 	test_filter_flags \
 	test_filter_str \
@@ -55,12 +66,11 @@ TESTS = \
 	test_index_hash \
 	test_bcj_exact_size \
 	test_memlimit \
+	test_alone_decoder \
 	test_lzip_decoder \
 	test_vli \
 	test_files.sh \
 	test_suffix.sh \
-	test_compress_prepared_bcj_sparc \
-	test_compress_prepared_bcj_x86 \
 	test_compress_generated_abc \
 	test_compress_generated_random \
 	test_compress_generated_text

@@ -87,17 +87,19 @@ read_name(const args_info *args)
 				continue;
 
 			message_error(_("%s: Error reading filenames: %s"),
-					args->files_name, strerror(errno));
-			return NULL;
+				tuklib_mask_nonprint(args->files_name),
+				strerror(errno));
+			break;
 		}
 
 		if (feof(args->files_file)) {
 			if (pos != 0)
 				message_error(_("%s: Unexpected end of input "
 						"when reading filenames"),
-						args->files_name);
+						tuklib_mask_nonprint(
+							args->files_name));
 
-			return NULL;
+			break;
 		}
 
 		if (c == args->files_delim) {
@@ -120,8 +122,10 @@ read_name(const args_info *args)
 			message_error(_("%s: Null character found when "
 					"reading filenames; maybe you meant "
 					"to use '--files0' instead "
-					"of '--files'?"), args->files_name);
-			return NULL;
+					"of '--files'?"),
+					tuklib_mask_nonprint(
+						args->files_name));
+			break;
 		}
 
 		name[pos++] = c;
@@ -130,11 +134,23 @@ read_name(const args_info *args)
 		// at least for one character to allow terminating the string
 		// with '\0'.
 		if (pos == size) {
+			// Prevent an integer overflow. This is only possible
+			// if allocating SIZE_MAX / 2 + 1 bytes has already
+			// succeeded.
+			//
+			// Use ENOMEM to for the error message to avoid adding
+			// a translatable string that will (almost) never be
+			// displayed in practice.
+			if (size > SIZE_MAX / 2)
+				message_fatal("%s", strerror(ENOMEM));
+
 			size *= 2;
 			name = xrealloc(name, size);
 		}
 	}
 
+	free(name);
+	name = NULL;
 	return NULL;
 }
 
@@ -321,8 +337,10 @@ main(int argc, char **argv)
 			run(name);
 		}
 
-		if (args.files_name != stdin_filename)
+		if (args.files_name != stdin_filename) {
 			(void)fclose(args.files_file);
+			free(args.files_name);
+		}
 	}
 
 #ifdef HAVE_DECODERS

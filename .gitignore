@@ -40,6 +40,10 @@ coverage
 /doc/internal
 /doc/api
 
+/po4a/man
+/po4a/xz-man.pot
+/po4a/*.po.authors
+
 /src/liblzma/liblzma.pc
 /src/lzmainfo/lzmainfo
 /src/xz/xz
@@ -94,7 +98,7 @@ coverage
 /liblzma-config-version.cmake
 /liblzma-config.cmake
 /Testing
-/tests_bin/
+/test_*
 /xz
 /xzdec
 /lzmadec

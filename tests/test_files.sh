@@ -7,9 +7,12 @@
 #
 ###############################################################################
 
+# Optional argument:
+# $1 = directory of the xz executable
+
 # If both xz and xzdec were not built, skip this test.
-XZ=../src/xz/xz
-XZDEC=../src/xzdec/xzdec
+XZ=${1:-../src/xz}/xz
+XZDEC=${2:-../src/xzdec}/xzdec
 test -x "$XZ" || XZ=
 test -x "$XZDEC" || XZDEC=
 if test -z "$XZ$XZDEC"; then
@@ -21,7 +24,9 @@ fi
 # This isn't perfect as if only some decompressors are disabled
 # then some good files might not decompress and the test fails
 # for a (kind of) wrong reason.
-if grep 'define HAVE_DECODERS' ../config.h > /dev/null ; then
+if test ! -f ../config.h ; then
+	:
+elif grep 'define HAVE_DECODERS' ../config.h > /dev/null ; then
 	:
 else
 	echo "Decompression support is disabled, skipping this test."
@@ -33,7 +38,8 @@ fi
 EXIT_STATUS=0
 have_feature()
 {
-	grep "define HAVE_$1 1" ../config.h > /dev/null && return 0
+	test -f ../config.h || return 0
+	grep "define HAVE_$1[ 1]*\$" ../config.h > /dev/null && return 0
 	printf '%s: Skipping because HAVE_%s is not enabled\n' "$2" "$1"
 	EXIT_STATUS=77
 	return 1
@@ -47,8 +53,10 @@ have_feature()
 # If these integrity check types were disabled at build time,
 # allow the tests to pass still.
 NO_WARN=
-grep 'define HAVE_CHECK_CRC64' ../config.h > /dev/null || NO_WARN=-qQ
-grep 'define HAVE_CHECK_SHA256' ../config.h > /dev/null || NO_WARN=-qQ
+if test -f ../config.h ; then
+	grep 'define HAVE_CHECK_CRC64' ../config.h > /dev/null || NO_WARN=-qQ
+	grep 'define HAVE_CHECK_SHA256' ../config.h > /dev/null || NO_WARN=-qQ
+fi
 
 for I in "$srcdir"/files/good-*.xz
 do
@@ -119,6 +127,21 @@ done
 I="$srcdir/files/bad-3-index-uncomp-overflow.xz"
 if test -n "$XZ" && "$XZ" -l "$I" > /dev/null 2>&1; then
 	echo "Bad file succeeded with xz -l: $I"
+	exit 1
+fi
+
+# Test that integer overflow in --list totals is caught.
+# It should succeed when the file is passed twice to xz -l and
+# fail when passed thrice.
+I="$srcdir/files/bad-1-index-huge-uncomp.xz"
+if test -z "$XZ" || "$XZ" -l "$I" "$I" > /dev/null 2>&1; then
+	:
+else
+	echo "xz -l unexpectedly failed when the file was used twice: $I"
+	exit 1
+fi
+if test -n "$XZ" && "$XZ" -l "$I" "$I" "$I" > /dev/null 2>&1; then
+	echo "xz -l unexpectedly succeeded when the file was used thrice: $I"
 	exit 1
 fi
 

@@ -153,7 +153,7 @@ lzma_filters_copy(const lzma_filter *src, lzma_filter *real_dest,
 		return LZMA_PROG_ERROR;
 
 	// Use a temporary destination so that the real destination
-	// will never be modied if an error occurs.
+	// will never be modified if an error occurs.
 	lzma_filter dest[LZMA_FILTERS_MAX + 1];
 
 	lzma_ret ret;
@@ -213,8 +213,8 @@ lzma_filters_copy(const lzma_filter *src, lzma_filter *real_dest,
 
 error:
 	// Free the options which we have already allocated.
-	while (i-- > 0)
-		lzma_free(dest[i].options, allocator);
+	while (i > 0)
+		lzma_free(dest[--i].options, allocator);
 
 	return ret;
 }

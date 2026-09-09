@@ -13,6 +13,7 @@
 #include <inttypes.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdatomic.h>
 #include "lzma.h"
 
 // Some header values can make liblzma allocate a lot of RAM
@@ -20,22 +21,79 @@
 // prevent extreme allocations when fuzzing.
 #define MEM_LIMIT (300 << 20) // 300 MiB
 
+// Amount of input to pass to lzma_code() per call at most.
+#define IN_CHUNK_SIZE 2047
+
+
+static atomic_ulong alloc_fail;
+
+
+static void *
+my_alloc(void *opaque, size_t nmemb, size_t size)
+{
+	(void)opaque;
+	(void)nmemb;
+
+	if (--alloc_fail == 0)
+		return NULL;
+
+	return malloc(size);
+}
+
 
 static void
-fuzz_code(lzma_stream *stream, const uint8_t *inbuf, size_t inbuf_size) {
+prepare_stream(lzma_stream *stream, const uint8_t *inbuf, size_t inbuf_size)
+{
+	stream->next_in = inbuf;
+	stream->avail_in = inbuf_size;
+
+	// Unless the input is very tiny, make one allocation in 1024 fail
+	// based on the last two input bytes and inbuf_size.
+	if (inbuf_size >= 10) {
+		alloc_fail = inbuf[inbuf_size - 2]
+				^ ((inbuf[inbuf_size - 1]) << 2)
+				^ (inbuf_size & 0x3FF);
+
+		static const lzma_allocator my_allocator
+				= { &my_alloc, NULL, NULL };
+		stream->allocator = &my_allocator;
+	}
+}
+
+
+static void
+fuzz_code(lzma_stream *stream, const uint8_t *inbuf, size_t inbuf_size)
+{
 	// Output buffer for decompressed data. This is write only; nothing
 	// cares about the actual data written here.
 	uint8_t outbuf[4096];
 
-	// Give the whole input buffer at once to liblzma.
-	// Output buffer isn't initialized as liblzma only writes to it.
+	// Pass half of the input on the first call and then proceed in
+	// chunks. It's fine that this rounds to 0 when inbuf_size is 1.
 	stream->next_in = inbuf;
-	stream->avail_in = inbuf_size;
-	stream->next_out = outbuf;
-	stream->avail_out = sizeof(outbuf);
+	stream->avail_in = inbuf_size / 2;
+
+	stream->next_out = NULL;
+	stream->avail_out = 0;
+
+	lzma_action action = LZMA_RUN;
 
 	lzma_ret ret;
-	while ((ret = lzma_code(stream, LZMA_FINISH)) == LZMA_OK) {
+	do {
+		if (stream->avail_in == 0 && inbuf_size > 0) {
+			const size_t chunk_size = inbuf_size < IN_CHUNK_SIZE
+					? inbuf_size : IN_CHUNK_SIZE;
+
+			stream->next_in = inbuf;
+			stream->avail_in = chunk_size;
+
+			inbuf += chunk_size;
+			inbuf_size -= chunk_size;
+
+			if (inbuf_size == 0)
+				action = LZMA_FINISH;
+		}
+
 		if (stream->avail_out == 0) {
 			// outbuf became full. We don't care about the
 			// uncompressed data there, so we simply reuse
@@ -43,7 +101,7 @@ fuzz_code(lzma_stream *stream, const uint8_t *inbuf, size_t inbuf_size) {
 			stream->next_out = outbuf;
 			stream->avail_out = sizeof(outbuf);
 		}
-	}
+	} while ((ret = lzma_code(stream, action)) == LZMA_OK);
 
 	// LZMA_PROG_ERROR should never happen as long as the code calling
 	// the liblzma functions is correct. Thus LZMA_PROG_ERROR is a sign
